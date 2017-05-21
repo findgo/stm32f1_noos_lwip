@@ -198,6 +198,16 @@ The STM32F2x7 allows computing and verifying the IP, UDP, TCP and ICMP checksums
  */
 #define LWIP_SOCKET                     0
 
+
+/**
+ * LWIP_DNS==1: Turn on DNS module. UDP must be available for DNS
+ * transport.
+ */
+
+#define LWIP_DNS                        1
+
+
+
 /*
    -----------------------------------
    ---------- DEBUG options ----------

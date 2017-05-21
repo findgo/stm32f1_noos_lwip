@@ -18,164 +18,6 @@
 #include "task.h"
 
 /*-----------------------------------------------------------------------------------*/
-//  Creates and returns a new semaphore. The "count" argument specifies
-//  the initial state of the semaphore.
-
-err_t sys_sem_new(sys_sem_t *sem, u8_t count)
-{
-
-	vSemaphoreCreateBinary( *sem );
-	
-	if( *sem == NULL )
-	{
-		
-#if SYS_STATS
-      ++lwip_stats.sys.sem.err;
-#endif /* SYS_STATS */
-			
-		return ERR_MEM;	// TODO need assert
-	}
-	
-	if(count == 0)	// Means it can't be taken
-	{
-		xSemaphoreTake(*sem, 1);
-	}
-
-#if SYS_STATS
-	++lwip_stats.sys.sem.used;
- 	if (lwip_stats.sys.sem.max < lwip_stats.sys.sem.used) {
-		lwip_stats.sys.sem.max = lwip_stats.sys.sem.used;
-	}
-#endif /* SYS_STATS */
-
-	return ERR_OK;
-}
-
-/*-----------------------------------------------------------------------------------*/
-// Deallocates a semaphore
-void sys_sem_free(sys_sem_t *sem)
-{
-#if SYS_STATS
-      --lwip_stats.sys.sem.used;
-#endif /* SYS_STATS */
-			
-	vSemaphoreDelete( *sem );
-}
-
-
-/*-----------------------------------------------------------------------------------*/
-// Signals a semaphore
-void sys_sem_signal(sys_sem_t *sem)
-{
-	xSemaphoreGive( *sem );
-}
-
-/*-----------------------------------------------------------------------------------*/
-/*
-  Blocks the thread while waiting for the semaphore to be
-  signaled. If the "timeout" argument is non-zero, the thread should
-  only be blocked for the specified time (measured in
-  milliseconds).
-
-  If the timeout argument is non-zero, the return value is the number of
-  milliseconds spent waiting for the semaphore to be signaled. If the
-  semaphore wasn't signaled within the specified time, the return value is
-  SYS_ARCH_TIMEOUT. If the thread didn't have to wait for the semaphore
-  (i.e., it was already signaled), the function may return zero.
-
-  Notice that lwIP implements a function with a similar name,
-  sys_sem_wait(), that uses the sys_arch_sem_wait() function.
-*/
-u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
-{
-	portTickType StartTime, EndTime, Elapsed;
-
-	StartTime = xTaskGetTickCount();
-
-	if(	timeout != 0)
-	{
-		if( xSemaphoreTake( *sem, timeout / portTICK_RATE_MS ) == pdTRUE )
-		{
-			EndTime = xTaskGetTickCount();
-			Elapsed = (EndTime - StartTime) * portTICK_RATE_MS;
-			
-			return (Elapsed); // return time blocked TODO test	
-		}
-		else
-		{
-			return SYS_ARCH_TIMEOUT;
-		}
-	}
-	else // must block without a timeout
-	{
-		while( xSemaphoreTake( *sem, portMAX_DELAY ) != pdTRUE ){}
-		EndTime = xTaskGetTickCount();
-		Elapsed = (EndTime - StartTime) * portTICK_RATE_MS;
-
-		return ( Elapsed ); // return time blocked	
-		
-	}
-}
-
-int sys_sem_valid(sys_sem_t *sem)
-{
-    return (*sem == SYS_SEM_NULL) ? 0 : 1;
-}
-
-//nothing to do
-void sys_sem_set_invalid(sys_sem_t *sem)
-{
-    *sem = SYS_SEM_NULL; 
-}
-
-/*-----------------------------------------------------------------------------------*/
-#if LWIP_COMPAT_MUTEX == 0
-/* Create a new mutex*/
-err_t sys_mutex_new(sys_mutex_t *mutex) {
-
-  *mutex = xSemaphoreCreateMutex();
-		if(*mutex == NULL)
-	{
-#if SYS_STATS
-      ++lwip_stats.sys.mutex.err;
-#endif /* SYS_STATS */	
-		return ERR_MEM;
-	}
-
-#if SYS_STATS
-	++lwip_stats.sys.mutex.used;
- 	if (lwip_stats.sys.mutex.max < lwip_stats.sys.mutex.used) {
-		lwip_stats.sys.mutex.max = lwip_stats.sys.mutex.used;
-	}
-#endif /* SYS_STATS */
-        return ERR_OK;
-}
-/*-----------------------------------------------------------------------------------*/
-/* Deallocate a mutex*/
-void sys_mutex_free(sys_mutex_t *mutex)
-{
-#if SYS_STATS
-      --lwip_stats.sys.mutex.used;
-#endif /* SYS_STATS */
-			
-	vQueueDelete(*mutex);
-}
-/*-----------------------------------------------------------------------------------*/
-/* Lock a mutex*/
-void sys_mutex_lock(sys_mutex_t *mutex)
-{
-	sys_arch_sem_wait(*mutex, 0);
-}
-
-/*-----------------------------------------------------------------------------------*/
-/* Unlock a mutex*/
-void sys_mutex_unlock(sys_mutex_t *mutex)
-{
-	xSemaphoreGive(*mutex);
-}
-#endif /*LWIP_COMPAT_MUTEX*/
-
-/*-----------------------------------------------------------------------------------*/
 //  Creates an empty mailbox.
 err_t sys_mbox_new(sys_mbox_t *mbox, int size)
 {	
@@ -342,6 +184,166 @@ void sys_mbox_set_invalid(sys_mbox_t *mbox)
 {
     *mbox = SYS_MBOX_NULL; 
 }
+
+
+
+/*-----------------------------------------------------------------------------------*/
+//  Creates and returns a new semaphore. The "count" argument specifies
+//  the initial state of the semaphore.
+
+err_t sys_sem_new(sys_sem_t *sem, u8_t count)
+{
+
+	vSemaphoreCreateBinary( *sem );
+	
+	if( *sem == NULL )
+	{
+		
+#if SYS_STATS
+      ++lwip_stats.sys.sem.err;
+#endif /* SYS_STATS */
+			
+		return ERR_MEM;	// TODO need assert
+	}
+	
+	if(count == 0)	// Means it can't be taken
+	{
+		xSemaphoreTake(*sem, 1);
+	}
+
+#if SYS_STATS
+	++lwip_stats.sys.sem.used;
+ 	if (lwip_stats.sys.sem.max < lwip_stats.sys.sem.used) {
+		lwip_stats.sys.sem.max = lwip_stats.sys.sem.used;
+	}
+#endif /* SYS_STATS */
+
+	return ERR_OK;
+}
+
+/*-----------------------------------------------------------------------------------*/
+// Deallocates a semaphore
+void sys_sem_free(sys_sem_t *sem)
+{
+#if SYS_STATS
+      --lwip_stats.sys.sem.used;
+#endif /* SYS_STATS */
+			
+	vSemaphoreDelete( *sem );
+}
+
+
+/*-----------------------------------------------------------------------------------*/
+// Signals a semaphore
+void sys_sem_signal(sys_sem_t *sem)
+{
+	xSemaphoreGive( *sem );
+}
+
+/*-----------------------------------------------------------------------------------*/
+/*
+  Blocks the thread while waiting for the semaphore to be
+  signaled. If the "timeout" argument is non-zero, the thread should
+  only be blocked for the specified time (measured in
+  milliseconds).
+
+  If the timeout argument is non-zero, the return value is the number of
+  milliseconds spent waiting for the semaphore to be signaled. If the
+  semaphore wasn't signaled within the specified time, the return value is
+  SYS_ARCH_TIMEOUT. If the thread didn't have to wait for the semaphore
+  (i.e., it was already signaled), the function may return zero.
+
+  Notice that lwIP implements a function with a similar name,
+  sys_sem_wait(), that uses the sys_arch_sem_wait() function.
+*/
+u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
+{
+	portTickType StartTime, EndTime, Elapsed;
+
+	StartTime = xTaskGetTickCount();
+
+	if(	timeout != 0)
+	{
+		if( xSemaphoreTake( *sem, timeout / portTICK_RATE_MS ) == pdTRUE )
+		{
+			EndTime = xTaskGetTickCount();
+			Elapsed = (EndTime - StartTime) * portTICK_RATE_MS;
+			
+			return (Elapsed); // return time blocked TODO test	
+		}
+		else
+		{
+			return SYS_ARCH_TIMEOUT;
+		}
+	}
+	else // must block without a timeout
+	{
+		while( xSemaphoreTake( *sem, portMAX_DELAY ) != pdTRUE ){}
+		EndTime = xTaskGetTickCount();
+		Elapsed = (EndTime - StartTime) * portTICK_RATE_MS;
+
+		return ( Elapsed ); // return time blocked	
+		
+	}
+}
+
+int sys_sem_valid(sys_sem_t *sem)
+{
+    return (*sem == SYS_SEM_NULL) ? 0 : 1;
+}
+
+//nothing to do
+void sys_sem_set_invalid(sys_sem_t *sem)
+{
+    *sem = SYS_SEM_NULL; 
+}
+
+/*-----------------------------------------------------------------------------------*/
+#if LWIP_COMPAT_MUTEX == 0
+/* Create a new mutex*/
+err_t sys_mutex_new(sys_mutex_t *mutex) {
+
+  *mutex = xSemaphoreCreateMutex();
+		if(*mutex == NULL)
+	{
+#if SYS_STATS
+      ++lwip_stats.sys.mutex.err;
+#endif /* SYS_STATS */	
+		return ERR_MEM;
+	}
+
+#if SYS_STATS
+	++lwip_stats.sys.mutex.used;
+ 	if (lwip_stats.sys.mutex.max < lwip_stats.sys.mutex.used) {
+		lwip_stats.sys.mutex.max = lwip_stats.sys.mutex.used;
+	}
+#endif /* SYS_STATS */
+        return ERR_OK;
+}
+/*-----------------------------------------------------------------------------------*/
+/* Deallocate a mutex*/
+void sys_mutex_free(sys_mutex_t *mutex)
+{
+#if SYS_STATS
+      --lwip_stats.sys.mutex.used;
+#endif /* SYS_STATS */
+			
+	vQueueDelete(*mutex);
+}
+/*-----------------------------------------------------------------------------------*/
+/* Lock a mutex*/
+void sys_mutex_lock(sys_mutex_t *mutex)
+{
+	sys_arch_sem_wait(*mutex, 0);
+}
+
+/*-----------------------------------------------------------------------------------*/
+/* Unlock a mutex*/
+void sys_mutex_unlock(sys_mutex_t *mutex)
+{
+	xSemaphoreGive(*mutex);
+}
+#endif /*LWIP_COMPAT_MUTEX*/
 
 /*-----------------------------------------------------------------------------------*/
 /*-----------------------------------------------------------------------------------*/
