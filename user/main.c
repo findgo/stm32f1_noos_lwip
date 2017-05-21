@@ -21,7 +21,7 @@ int main(void)
 	Usart_Configuration();
     netconf_init();
     
-    HelloWorld_init();
+    //HelloWorld_init();
 #ifdef DEBUG_MSG
     DBG_VERBOS("init success!\r\n");
 	funcheckinit();
