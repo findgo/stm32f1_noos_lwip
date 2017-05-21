@@ -14,7 +14,7 @@
 #include "arch/sys_arch.h"
 #include <stdio.h>
 #include "netconf.h"
-#include "bsp_spi1.h"
+#include "bsp_loweth.h"
 
 #define MAX_DHCP_TRIES	4
 
@@ -35,9 +35,10 @@ void netconf_init(void)
     struct ip_addr ipaddr;  
     struct ip_addr netmask;  
     struct ip_addr gw; 
-    
-    BSP_ConfigSPI1();
+    uint8_t macaddress[6]={'A','R','M','E','T','H'};
 
+    bsp_lowethInit(); // 初始化网卡GPIO 中断 DMA等底层
+    net_pkt_intConfig(); // 配置数据接收中断
     // 初始化
 #if NO_SYS
     lwip_init();  
@@ -65,7 +66,7 @@ void netconf_init(void)
 //    inet_aton("192.168.1.1",&netmask);
 
 #endif
-    //  Set_MAC_Address(macaddress); //设置MAC地址
+      Set_MAC_Address(macaddress); //设置MAC地址
  
     // 初始化netcard 与LWIP的接口，参数为网络接口结构体、ip地址、  
     // 子网掩码、网关、网卡信息指针、初始化函数、输入函数  
@@ -85,8 +86,6 @@ void netconf_init(void)
     dhcp_start(&netif);
 #endif
     netif_set_up(&netif);
-
-    net_pkt_intConfig();
 }
 /**   
 * @brief TcpipInitDone wait for tcpip init being done  
@@ -123,7 +122,7 @@ void net_Periodic_Handle(void)
 void net_pkt_handle(void)
 {
   /* Read a received packet from the Ethernet buffers and send it to the lwIP for handling */
-    while(ETH_packet_getcount() != 0) 
+    while(ETH_GetRxPktSize() != 0) 
     {     
         ethernetif_input(&netif);
     }
@@ -164,43 +163,36 @@ void Display_IPAddress(void)
 }  
 
 
+// 配置网卡收到数据包中断
 static void net_pkt_intConfig(void)
 {
-    NVIC_InitTypeDef NVIC_InitStructure;
-    EXTI_InitTypeDef EXTI_InitStructure;
-    GPIO_InitTypeDef GPIO_InitStructure;
-
-    NET_PKT_POART_CLOCK_EN();
-    GPIO_InitStructure.GPIO_Pin   = NET_PKT_INT_PIN;
-    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_IPU;  
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
-    GPIO_Init(NET_PKT_INT_PORT, &GPIO_InitStructure);
-
-    // 配置net数据来时的中断
-    NVIC_InitStructure.NVIC_IRQChannel = EXTI0_IRQn; 
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority =  2; 
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;                
-    NVIC_Init(&NVIC_InitStructure);
+    NVIC_InitTypeDef   NVIC_InitStructure;
     
-    // 配置外部中断线源
-    GPIO_EXTILineConfig(NET_PKT_INT_PORTSource, NET_PKT_INT_PINSource);
-    EXTI_InitStructure.EXTI_Line    = NET_PKT_INT_EXTI_LINE;             
-    EXTI_InitStructure.EXTI_Mode    = EXTI_Mode_Interrupt;       // 中断模式
-    EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;      // 下降沿触发
-    EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-    EXTI_Init(&EXTI_InitStructure); 
+    /* Set the Vector Table base location at 0x08000000 */
+    NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);
+        
+    /* Enable the Ethernet global Interrupt */
+    NVIC_InitStructure.NVIC_IRQChannel = ETH_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);   
 }
 
-
-void EXTI0_IRQHandler(void)
+/* @brief  This function handles ETH interrupt request. */
+void ETH_IRQHandler(void)
 {
-    if(EXTI_GetITStatus(EXTI_Line0)){
-        net_pkt_handle();
+    /* Handles all the received frames */
+    net_pkt_handle();
 
-        EXTI_ClearITPendingBit(EXTI_Line0);
-    }
-    
+    /* Clear the Eth DMA Rx IT pending bits */
+    ETH_DMAClearITPendingBit(ETH_DMA_IT_R);
+    ETH_DMAClearITPendingBit(ETH_DMA_IT_NIS);
 }
 
+/* @brief  This function ETH wakeup request. */
+void ETH_WKUP_IRQHandler(void)
+{
+
+}
 

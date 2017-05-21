@@ -52,11 +52,16 @@
 #include <lwip/snmp.h>
 #include "netif/etharp.h"
 #include "netif/ppp_oe.h"
-
+#include "string.h"
 #include "ethernetif.h"
+
 /* Define those to better describe your network interface. */
 #define IFNAME0 'e'
 #define IFNAME1 'n'
+
+#define  ETH_DMARxDesc_FrameLengthShift           16
+#define  ETH_ERROR              ((u32)0)
+#define  ETH_SUCCESS            ((u32)1)
 
 /**
  * Helper struct to hold private data used to operate your ethernet interface.
@@ -69,8 +74,46 @@ struct ethernetif {
   /* Add whatever per-interface state that is needed here. */
 };
 
-/* Forward declarations. */
-//static void  ethernetif_input(struct netif *netif);
+#define ETH_RXBUFNB        4
+#define ETH_TXBUFNB        2
+
+static uint8_t MACaddr[6];
+ETH_DMADESCTypeDef  DMARxDscrTab[ETH_RXBUFNB], DMATxDscrTab[ETH_TXBUFNB];/* Ethernet Rx & Tx DMA Descriptors */
+uint8_t Rx_Buff[ETH_RXBUFNB][ETH_MAX_PACKET_SIZE], Tx_Buff[ETH_TXBUFNB][ETH_MAX_PACKET_SIZE];/* Ethernet buffers */
+
+ETH_DMADESCTypeDef  *DMATxDesc = DMATxDscrTab;
+
+extern ETH_DMADESCTypeDef  *DMATxDescToSet;
+extern ETH_DMADESCTypeDef  *DMARxDescToGet;
+
+typedef struct{
+    uint32_t length;
+    uint32_t buffer;
+    ETH_DMADESCTypeDef *descriptor;
+}FrameTypeDef;
+
+static FrameTypeDef ETH_RxPkt_ChainMode(void);
+static uint32_t ETH_GetCurrentTxBuffer(void);
+static uint32_t ETH_TxPkt_ChainMode(uint16_t FrameLength);
+
+
+/**
+ * Setting the MAC address.
+ *
+ * @param netif the already initialized lwip network interface structure
+ *        for this ethernetif
+ */
+void Set_MAC_Address(uint8_t* macadd)
+{
+    MACaddr[0] = macadd[0];
+    MACaddr[1] = macadd[1];
+    MACaddr[2] = macadd[2];
+    MACaddr[3] = macadd[3];
+    MACaddr[4] = macadd[4];
+    MACaddr[5] = macadd[5];
+
+    ETH_MACAddressConfig(ETH_MAC_Address0, macadd);  
+}
 
 /**
  * In this function, the hardware should be initialized.
@@ -86,22 +129,50 @@ low_level_init(struct netif *netif)
   netif->hwaddr_len = ETHARP_HWADDR_LEN;
 
   /* set MAC hardware address */
-  netif->hwaddr[0] = 'A';
-  netif->hwaddr[1] = 'R';
-  netif->hwaddr[2] = 'M';
-  netif->hwaddr[3] = 'N';
-  netif->hwaddr[4] = 'E';
-  netif->hwaddr[5] = 'T';
-  
+  netif->hwaddr[0] =  MACaddr[0];
+  netif->hwaddr[1] =  MACaddr[1];
+  netif->hwaddr[2] =  MACaddr[2];
+  netif->hwaddr[3] =  MACaddr[3];
+  netif->hwaddr[4] =  MACaddr[4];
+  netif->hwaddr[5] =  MACaddr[5];
+
   /* maximum transfer unit */
   netif->mtu = 1500;
   
   /* device capabilities */
   /* don't set NETIF_FLAG_ETHARP if this device is not an ethernet one */
   netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
- 
+
+
   /* Do whatever else is needed to initialize interface. */  
-  ETH_init(netif->hwaddr);     // ¡¾1¡¿
+  //ETH_init(netif->hwaddr);     // ¡¾1¡¿
+  
+  /* Initialize Tx Descriptors list: Chain Mode */
+  ETH_DMATxDescChainInit(DMATxDscrTab, &Tx_Buff[0][0], ETH_TXBUFNB);
+  /* Initialize Rx Descriptors list: Chain Mode  */
+  ETH_DMARxDescChainInit(DMARxDscrTab, &Rx_Buff[0][0], ETH_RXBUFNB);
+
+  /* Enable Ethernet Rx interrrupt */
+  { int i;
+    for(i=0; i<ETH_RXBUFNB; i++)
+    {
+      ETH_DMARxDescReceiveITConfig(&DMARxDscrTab[i], ENABLE);
+    }
+  }
+
+#ifdef CHECKSUM_BY_HARDWARE
+  /* Enable the checksum insertion for the Tx frames */
+  { int i;
+    for(i=0; i<ETH_TXBUFNB; i++)
+    {
+      ETH_DMATxDescChecksumInsertionConfig(&DMATxDscrTab[i], ETH_DMATxDesc_ChecksumTCPUDPICMPFull);
+    }
+  }
+#endif
+
+  /* Enable MAC and DMA transmission and reception */
+  ETH_Start();
+
 }
 
 /**
@@ -123,6 +194,7 @@ low_level_init(struct netif *netif)
 static err_t
 low_level_output(struct netif *netif, struct pbuf *p)
 {
+#if 0
   struct pbuf *q;
 
   //initiate transfer();
@@ -147,9 +219,24 @@ low_level_output(struct netif *netif, struct pbuf *p)
   pbuf_header(p, ETH_PAD_SIZE); /* reclaim the padding word */
 #endif
   
+#else
+  struct pbuf *q;
+  int l = 0;
+  u8 *buffer =  (u8 *)ETH_GetCurrentTxBuffer();
+  
+  for(q = p; q != NULL; q = q->next) 
+  {
+    memcpy((u8_t*)&buffer[l], q->payload, q->len);
+	l = l + q->len;
+  }
+
+  ETH_TxPkt_ChainMode(l);
+#endif
+
   LINK_STATS_INC(link.xmit);
 
-  return ERR_OK;
+  return ERR_OK;  
+  
 }
 
 /**
@@ -165,7 +252,7 @@ low_level_input(struct netif *netif)
 {
   struct pbuf *p, *q;
   u16_t len;
-
+#if 0
   /* Obtain the size of the packet and put it into the "len"
      variable. */
   len = ETH_packet_getlen();     // ¡¾1¡¿
@@ -208,6 +295,48 @@ low_level_input(struct netif *netif)
     LINK_STATS_INC(link.memerr);
     LINK_STATS_INC(link.drop);
   }
+#else
+  int l =0;
+  FrameTypeDef frame;
+  u8 *buffer;
+  
+  p = NULL;
+  frame = ETH_RxPkt_ChainMode();
+  /* Obtain the size of the packet and put it into the "len"
+     variable. */
+  len = frame.length;
+  
+  buffer = (u8 *)frame.buffer;
+
+  /* We allocate a pbuf chain of pbufs from the pool. */
+  p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
+
+  if (p != NULL)
+  {
+    for (q = p; q != NULL; q = q->next)
+    {
+	  memcpy((u8_t*)q->payload, (u8_t*)&buffer[l], q->len);
+      l = l + q->len;
+    }
+    LINK_STATS_INC(link.recv);
+  }else{
+      LINK_STATS_INC(link.memerr);
+      LINK_STATS_INC(link.drop);
+  }
+
+
+  /* Set Own bit of the Rx descriptor Status: gives the buffer back to ETHERNET DMA */
+  frame.descriptor->Status = ETH_DMARxDesc_OWN; 
+ 
+  /* When Rx Buffer unavailable flag is set: clear it and resume reception */
+  if ((ETH->DMASR & ETH_DMASR_RBUS) != (u32)RESET)  
+  {
+    /* Clear RBUS ETHERNET DMA flag */
+    ETH->DMASR = ETH_DMASR_RBUS;
+    /* Resume DMA reception */
+    ETH->DMARPDR = 0;
+  }
+#endif
 
   return p;  
 }
@@ -273,7 +402,16 @@ ethernetif_input(struct netif *netif)
 err_t
 ethernetif_init(struct netif *netif)
 {
-  LWIP_ASSERT("netif != NULL", (netif != NULL));
+    struct ethernetif *ethernetif;
+
+    LWIP_ASSERT("netif != NULL", (netif != NULL));
+    
+    ethernetif = mem_malloc(sizeof(struct ethernetif));
+    if (ethernetif == NULL)
+    {
+        LWIP_DEBUGF(NETIF_DEBUG, ("ethernetif_init: out of memory\n"));
+        return ERR_MEM;
+    }
     
 #if LWIP_NETIF_HOSTNAME
   /* Initialize interface hostname */
@@ -285,8 +423,9 @@ ethernetif_init(struct netif *netif)
    * The last argument should be replaced with your link speed, in units
    * of bits per second.
    */
-  NETIF_INIT_SNMP(netif, snmp_ifType_ethernet_csmacd, LINK_SPEED_OF_YOUR_NETIF_IN_BPS);
+  NETIF_INIT_SNMP(netif, snmp_ifType_ethernet_csmacd, 100000000);
 
+  netif->state = ethernetif;
   netif->name[0] = IFNAME0;
   netif->name[1] = IFNAME1;
   /* We directly use etharp_output() here to save a function call.
@@ -295,9 +434,128 @@ ethernetif_init(struct netif *netif)
    * is available...) */
   netif->output = etharp_output;
   netif->linkoutput = low_level_output;
-  
+
+  ethernetif->ethaddr = (struct eth_addr *)&(netif->hwaddr[0]);
+
   /* initialize the hardware */
   low_level_init(netif);
 
   return ERR_OK;
+}
+/*******************************************************************************
+* Function Name  : ETH_RxPkt_ChainMode
+* Description    : Receives a packet.
+* Input          : None
+* Output         : None
+* Return         : frame: farme size and location
+*******************************************************************************/
+static FrameTypeDef ETH_RxPkt_ChainMode(void)
+{ 
+  u32 framelength = 0;
+  FrameTypeDef frame = {0,0}; 
+
+  /* Check if the descriptor is owned by the ETHERNET DMA (when set) or CPU (when reset) */
+  if((DMARxDescToGet->Status & ETH_DMARxDesc_OWN) != (u32)RESET)
+  {	
+	frame.length = ETH_ERROR;
+
+    if ((ETH->DMASR & ETH_DMASR_RBUS) != (u32)RESET)  
+    {
+      /* Clear RBUS ETHERNET DMA flag */
+      ETH->DMASR = ETH_DMASR_RBUS;
+      /* Resume DMA reception */
+      ETH->DMARPDR = 0;
+    }
+
+	/* Return error: OWN bit set */
+    return frame; 
+  }
+  
+  if(((DMARxDescToGet->Status & ETH_DMARxDesc_ES) == (u32)RESET) && 
+     ((DMARxDescToGet->Status & ETH_DMARxDesc_LS) != (u32)RESET) &&  
+     ((DMARxDescToGet->Status & ETH_DMARxDesc_FS) != (u32)RESET))  
+  {      
+    /* Get the Frame Length of the received packet: substruct 4 bytes of the CRC */
+    framelength = ((DMARxDescToGet->Status & ETH_DMARxDesc_FL) >> ETH_DMARxDesc_FrameLengthShift) - 4;
+	
+	/* Get the addrees of the actual buffer */
+	frame.buffer = DMARxDescToGet->Buffer1Addr;	
+  }
+  else
+  {
+    /* Return ERROR */
+    framelength = ETH_ERROR;
+  }
+
+  frame.length = framelength;
+
+
+  frame.descriptor = DMARxDescToGet;
+  
+  /* Update the ETHERNET DMA global Rx descriptor with next Rx decriptor */      
+  /* Chained Mode */    
+  /* Selects the next DMA Rx descriptor list for next buffer to read */ 
+  DMARxDescToGet = (ETH_DMADESCTypeDef*) (DMARxDescToGet->Buffer2NextDescAddr);    
+  
+  /* Return Frame */
+  return (frame);  
+}
+
+/*******************************************************************************
+* Function Name  : ETH_TxPkt_ChainMode
+* Description    : Transmits a packet, from application buffer, pointed by ppkt.
+* Input          : - FrameLength: Tx Packet size.
+* Output         : None
+* Return         : ETH_ERROR: in case of Tx desc owned by DMA
+*                  ETH_SUCCESS: for correct transmission
+*******************************************************************************/
+static uint32_t ETH_TxPkt_ChainMode(uint16_t FrameLength)
+{   
+  /* Check if the descriptor is owned by the ETHERNET DMA (when set) or CPU (when reset) */
+  if((DMATxDescToSet->Status & ETH_DMATxDesc_OWN) != (u32)RESET)
+  {  
+	/* Return ERROR: OWN bit set */
+    return ETH_ERROR;
+  }
+        
+  /* Setting the Frame Length: bits[12:0] */
+  DMATxDescToSet->ControlBufferSize = (FrameLength & ETH_DMATxDesc_TBS1);
+
+  /* Setting the last segment and first segment bits (in this case a frame is transmitted in one descriptor) */    
+  DMATxDescToSet->Status |= ETH_DMATxDesc_LS | ETH_DMATxDesc_FS;
+
+  /* Set Own bit of the Tx descriptor Status: gives the buffer back to ETHERNET DMA */
+  DMATxDescToSet->Status |= ETH_DMATxDesc_OWN;
+
+  /* When Tx Buffer unavailable flag is set: clear it and resume transmission */
+  if ((ETH->DMASR & ETH_DMASR_TBUS) != (u32)RESET)
+  {
+    /* Clear TBUS ETHERNET DMA flag */
+    ETH->DMASR = ETH_DMASR_TBUS;
+    /* Resume DMA transmission*/
+    ETH->DMATPDR = 0;
+  }
+  
+  /* Update the ETHERNET DMA global Tx descriptor with next Tx decriptor */  
+  /* Chained Mode */
+  /* Selects the next DMA Tx descriptor list for next buffer to send */ 
+  DMATxDescToSet = (ETH_DMADESCTypeDef*) (DMATxDescToSet->Buffer2NextDescAddr);    
+
+
+  /* Return SUCCESS */
+  return ETH_SUCCESS;   
+}
+
+
+/*******************************************************************************
+* Function Name  : ETH_GetCurrentTxBuffer
+* Description    : Return the address of the buffer pointed by the current descritor.
+* Input          : None
+* Output         : None
+* Return         : Buffer address
+*******************************************************************************/
+static uint32_t ETH_GetCurrentTxBuffer(void)
+{ 
+  /* Return Buffer address */
+  return (DMATxDescToSet->Buffer1Addr);   
 }
