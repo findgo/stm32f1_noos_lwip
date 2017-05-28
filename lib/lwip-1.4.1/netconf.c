@@ -35,7 +35,7 @@ void netconf_init(void)
     struct ip_addr ipaddr;  
     struct ip_addr netmask;  
     struct ip_addr gw; 
-    uint8_t macaddress[6]={'A','R','M','E','T','H'};
+    uint8_t macaddress[6]={'A','R','M','E','T','H'}; 
 
     bsp_lowethInit(); // 初始化网卡GPIO 中断 DMA等底层
     net_pkt_intConfig(); // 配置数据接收中断
@@ -58,12 +58,12 @@ void netconf_init(void)
     gw.addr = 0;
 #else
     /* 启用静态IP */
-    IP4_ADDR(&ipaddr, 192, 168, 1, 116); // 设置网络接口的ip地址  
-    IP4_ADDR(&netmask, 255, 255, 255, 0);    // 子网掩码  
-    IP4_ADDR(&gw, 192, 168, 1, 1);   // 网关  
-//    inet_aton("192.168.1.116",&ipaddr);
-//    inet_aton("255.255.255.0",&netmask);
-//    inet_aton("192.168.1.1",&netmask);
+//    IP4_ADDR(&ipaddr, 192, 168, 1, 116); // 设置网络接口的ip地址  
+//    IP4_ADDR(&netmask, 255, 255, 255, 0);    // 子网掩码  
+//    IP4_ADDR(&gw, 192, 168, 1, 1);   // 网关  
+	inet_aton("192.168.1.116",&ipaddr);
+	inet_aton("255.255.255.0",&netmask);
+	inet_aton("192.168.1.1",&netmask);
 
 #endif
       Set_MAC_Address(macaddress); //设置MAC地址
@@ -87,6 +87,7 @@ void netconf_init(void)
 #endif
     netif_set_up(&netif);
 }
+
 /**   
 * @brief TcpipInitDone wait for tcpip init being done  
 *   
@@ -107,6 +108,7 @@ void net_Periodic_Handle(void)
 {
     // 轮询接收数据，要采用中断
     //net_pkt_handle();
+    
     /** Handle timeouts for NO_SYS==1 (i.e. without using
      * tcpip_thread/sys_timeouts_mbox_fetch(). Uses sys_now() to call timeout
      * handler functions when timeouts expire.
@@ -134,13 +136,9 @@ void Display_IPAddress(void)
 	if(IPaddress != netif.ip_addr.addr){
 		/* IP 地址发生改变*/
 		__IO uint8_t iptab[4];
-//		uint8_t iptxt[20]; 
+		
 		 /* read the new IP address */
 		 IPaddress = netif.ip_addr.addr;
-		 iptab[0] = (uint8_t)(IPaddress >> 24);
-		 iptab[1] = (uint8_t)(IPaddress >> 16);
-		 iptab[2] = (uint8_t)(IPaddress >> 8);
-		 iptab[3] = (uint8_t)(IPaddress);
 	} 
 #if LWIP_DHCP
 	else if(IPaddress == 0){  
@@ -153,9 +151,9 @@ void Display_IPAddress(void)
 			struct ip_addr netmask;
 			struct ip_addr gw;
 			dhcp_stop(&netif);
-			IP4_ADDR(&ipaddr, 10, 21, 11, 245);
+			IP4_ADDR(&ipaddr, 192, 168, 1, 116);
 			IP4_ADDR(&netmask, 255, 255, 255, 0);
-			IP4_ADDR(&gw, 10, 21, 11, 254);
+			IP4_ADDR(&gw, 192, 168, 1, 116);
 			netif_set_addr(&netif, &ipaddr , &netmask, &gw); 
 		}
 	} 
@@ -167,10 +165,7 @@ void Display_IPAddress(void)
 static void net_pkt_intConfig(void)
 {
     NVIC_InitTypeDef   NVIC_InitStructure;
-    
-    /* Set the Vector Table base location at 0x08000000 */
-    NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);
-        
+            
     /* Enable the Ethernet global Interrupt */
     NVIC_InitStructure.NVIC_IRQChannel = ETH_IRQn;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
@@ -193,6 +188,7 @@ void ETH_IRQHandler(void)
 /* @brief  This function ETH wakeup request. */
 void ETH_WKUP_IRQHandler(void)
 {
+
 
 }
 

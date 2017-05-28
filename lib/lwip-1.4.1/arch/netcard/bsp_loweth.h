@@ -1,5 +1,7 @@
 
 
+/*网卡底层IO配置,以及一些基本设置*/
+
 #ifndef __BSP_LOWETH_H_
 #define __BSP_LOWETH_H_
 
@@ -8,7 +10,7 @@
 #include "stdlib.h"
 
 /* Private define ------------------------------------------------------------*/
-#define DP83848_PHY        /* Ethernet pins mapped on STM3210C-EVAL Board */
+//#define DP83848_PHY        /* Ethernet pins mapped on STM3210C-EVAL Board */
 #define PHY_ADDRESS       0x01 /* Relative to STM3210C-EVAL Board */
 
 //#define MII_MODE          /* MII mode for STM3210C-EVAL Board (MB784) (check jumpers setting) */

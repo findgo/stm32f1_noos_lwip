@@ -21,7 +21,7 @@ int main(void)
 	Usart_Configuration();
     netconf_init();
     
-    //HelloWorld_init();
+    HelloWorld_init();
 #ifdef DEBUG_MSG
     DBG_VERBOS("init success!\r\n");
 	funcheckinit();
@@ -129,6 +129,9 @@ static void prvClockInit(void)
 //nvic configuration
 static void prvnvicInit(void)
 {
+    /* Set the Vector Table base location at 0x08000000 */
+//    NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);
+
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 }
 

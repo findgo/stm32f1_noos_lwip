@@ -6,6 +6,7 @@
 
 //spi1
 #define HAL_SPI1_MODE        (0)
+
 /*∂®“Â”≤º˛IO*/
 #define HAL_SPI1_SCK_PORT        GPIOA
 #define HAL_SPI1_SCK_PIN         GPIO_Pin_5

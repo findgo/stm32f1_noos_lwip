@@ -28,11 +28,9 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
-#define GREETING "\n\r======= ARM技术论坛 www.armjishu.com =======\
-                  \n\r== 欢迎使用STM32神舟IV号开发板 以太网演示 ==\
-                  \n\r== Telnet远程登录成功    开发板【23】端口 ==\
+#define GREETING "\n\rhello world port:23\r\n\
                   \n\rHello. What is your name?\r\n"
-const uint8_t STM32F10x_STR[] = "stm32f10xstr";
+const char STM32F10x_STR[] = "stm32f10x_helloworld!\r\n";
 #define HELLO "\n\rSTM32神舟系列开发板【23】端口 Hello "
 #define MAX_NAME_SIZE 32
 
@@ -148,7 +146,7 @@ static err_t HelloWorld_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err
 static err_t HelloWorld_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 {     
   u32_t IPaddress;
-  u8_t iptxt[50];
+  char iptxt[50];
   volatile u8_t iptab[4];
   
   IPaddress = pcb->remote_ip.addr;
