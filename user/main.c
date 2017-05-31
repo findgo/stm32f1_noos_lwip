@@ -7,6 +7,7 @@
 #include "netconf.h"
 
 #include "helloworld.h"
+#include "httpd.h"
 
 static void prvClockInit(void);
 static void prvnvicInit(void);
@@ -22,6 +23,7 @@ int main(void)
     netconf_init();
     
     HelloWorld_init();
+	httpd_init();
 #ifdef DEBUG_MSG
     DBG_VERBOS("init success!\r\n");
 	funcheckinit();

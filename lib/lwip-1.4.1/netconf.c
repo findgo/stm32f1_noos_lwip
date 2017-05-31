@@ -58,12 +58,14 @@ void netconf_init(void)
     gw.addr = 0;
 #else
     /* 启用静态IP */
-//    IP4_ADDR(&ipaddr, 192, 168, 1, 116); // 设置网络接口的ip地址  
-//    IP4_ADDR(&netmask, 255, 255, 255, 0);    // 子网掩码  
-//    IP4_ADDR(&gw, 192, 168, 1, 1);   // 网关  
-	inet_aton("192.168.1.116",&ipaddr);
+/*
+    IP4_ADDR(&ipaddr, 192, 168, 3, 116); // 设置网络接口的ip地址  
+    IP4_ADDR(&netmask, 255, 255, 255, 0);    // 子网掩码  
+    IP4_ADDR(&gw, 192, 168, 3, 1);   // 网关  
+*/
+    inet_aton("192.168.1.116",&ipaddr);
 	inet_aton("255.255.255.0",&netmask);
-	inet_aton("192.168.1.1",&netmask);
+	inet_aton("192.168.1.1",&gw);
 
 #endif
       Set_MAC_Address(macaddress); //设置MAC地址
@@ -153,7 +155,7 @@ void Display_IPAddress(void)
 			dhcp_stop(&netif);
 			IP4_ADDR(&ipaddr, 192, 168, 1, 116);
 			IP4_ADDR(&netmask, 255, 255, 255, 0);
-			IP4_ADDR(&gw, 192, 168, 1, 116);
+			IP4_ADDR(&gw, 192, 168, 1, 1);
 			netif_set_addr(&netif, &ipaddr , &netmask, &gw); 
 		}
 	} 
